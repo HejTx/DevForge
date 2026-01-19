@@ -1,0 +1,122 @@
+import { GoogleGenAI, Type } from "@google/genai";
+import { ProjectData, UserPreferences, Difficulty } from "../types";
+
+const getClient = () => {
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) {
+    throw new Error("API_KEY environment variable is missing.");
+  }
+  return new GoogleGenAI({ apiKey });
+};
+
+export const generateProject = async (prefs: UserPreferences): Promise<ProjectData> => {
+  const ai = getClient();
+  
+  const conceptsStr = prefs.concepts.length > 0 ? ` focusing on ${prefs.concepts.join(', ')}` : '';
+  const prompt = `Create a highly detailed and rigorous programming project specification for a ${prefs.level} level developer in ${prefs.language}${conceptsStr}. 
+
+  The project must simulate a real-world technical task. It requires:
+  1. A clear Problem Statement (Description).
+  2. Precise Input/Output definitions (e.g., "Input is read from STDIN. First line contains integer N...").
+  3. Explicit Edge Case handling requirements (e.g., "Handle integer overflow", "Empty arrays").
+  4. Functional requirements.
+
+  The description should be verbose enough to leave no ambiguity about the expected behavior.
+
+  Include 3-5 distinct test cases with raw string inputs and expected outputs.`;
+
+  const response = await ai.models.generateContent({
+    model: 'gemini-3-flash-preview',
+    contents: prompt,
+    config: {
+      systemInstruction: "You are a senior technical lead designing a comprehensive project specification.",
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          title: { type: Type.STRING },
+          description: { type: Type.STRING },
+          objective: { type: Type.STRING },
+          inputFormat: { type: Type.STRING, description: "Detailed specification of input format (source, structure, constraints)." },
+          outputFormat: { type: Type.STRING, description: "Detailed specification of output format." },
+          edgeCases: { 
+            type: Type.ARRAY,
+            items: { type: Type.STRING },
+            description: "List of specific edge cases to handle."
+          },
+          functionalRequirements: { 
+            type: Type.ARRAY,
+            items: { type: Type.STRING }
+          },
+          nonFunctionalRequirements: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING }
+          },
+          techStackRecommendation: { type: Type.STRING },
+          testCases: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                name: { type: Type.STRING },
+                input: { type: Type.STRING },
+                expectedOutput: { type: Type.STRING },
+                explanation: { type: Type.STRING }
+              },
+              required: ["name", "input", "expectedOutput", "explanation"]
+            }
+          }
+        },
+        required: ["title", "description", "objective", "inputFormat", "outputFormat", "edgeCases", "functionalRequirements", "testCases"]
+      }
+    }
+  });
+
+  const text = response.text;
+  if (!text) throw new Error("No response from Gemini");
+  
+  return JSON.parse(text) as ProjectData;
+};
+
+export const getMentorHint = async (
+  project: ProjectData, 
+  history: { role: string, text: string }[], 
+  currentQuery: string
+): Promise<string> => {
+  const ai = getClient();
+
+  const context = `
+    Current Project: ${project.title}
+    Objective: ${project.objective}
+    Description: ${project.description}
+    Input Format: ${project.inputFormat}
+    Output Format: ${project.outputFormat}
+    Edge Cases: ${project.edgeCases.join('; ')}
+    Requirements: ${project.functionalRequirements.join('; ')}
+  `;
+
+  const chat = ai.chats.create({
+    model: 'gemini-3-flash-preview',
+    config: {
+      systemInstruction: `You are a Socratic mentor for a programming student. 
+      The student is working on the project described below.
+      Your goal is to guide them to the solution without writing the code for them.
+      - Do not provide full code snippets.
+      - Ask leading questions.
+      - Explain concepts (e.g., recursion, hashmaps) if they are stuck on the theory.
+      - Help debug logic errors by asking them to trace their code.
+      - Be encouraging but firm on them doing the work.
+      
+      ${context}`
+    }
+  });
+
+  for (const msg of history) {
+    if (msg.role === 'user') {
+       await chat.sendMessage({ message: msg.text });
+    }
+  }
+
+  const result = await chat.sendMessage({ message: currentQuery });
+  return result.text || "I couldn't generate a hint right now.";
+};
