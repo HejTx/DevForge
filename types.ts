@@ -12,6 +12,8 @@ export interface TestCase {
 }
 
 export interface ProjectData {
+  id?: string;
+  createdAt?: number;
   title: string;
   description: string;
   objective: string;
@@ -34,4 +36,13 @@ export interface ChatMessage {
   role: 'user' | 'model';
   text: string;
   timestamp: number;
+}
+
+export interface CodeReviewResult {
+  score: number;
+  summary: string;
+  strengths: string[];
+  weaknesses: string[];
+  securityConcerns: string[];
+  refactoredSnippet: string;
 }

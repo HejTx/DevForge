@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { ProjectData, UserPreferences, Difficulty } from "../types";
+import { ProjectData, UserPreferences, Difficulty, CodeReviewResult } from "../types";
 
 const getClient = () => {
   const apiKey = process.env.API_KEY;
@@ -120,3 +120,64 @@ export const getMentorHint = async (
   const result = await chat.sendMessage({ message: currentQuery });
   return result.text || "I couldn't generate a hint right now.";
 };
+
+export const generateCodeReview = async (project: ProjectData, userCode: string): Promise<CodeReviewResult> => {
+  const ai = getClient();
+
+  const prompt = `Review the following code submission for the project "${project.title}".
+  
+  Project Requirements:
+  ${project.functionalRequirements.join('\n')}
+  
+  User Code:
+  ${userCode}
+  
+  Provide a strict, professional code review focusing on:
+  1. Correctness (Does it solve the problem?)
+  2. Efficiency (Big O time/space complexity)
+  3. Clean Code (Naming, modularity)
+  4. Security (if applicable)
+  
+  Provide a refactored snippet for the most critical improvement.`;
+
+  const response = await ai.models.generateContent({
+    model: 'gemini-3-flash-preview',
+    contents: prompt,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          score: { type: Type.INTEGER, description: "Score out of 100" },
+          summary: { type: Type.STRING, description: "Executive summary of the review" },
+          strengths: { type: Type.ARRAY, items: { type: Type.STRING } },
+          weaknesses: { type: Type.ARRAY, items: { type: Type.STRING } },
+          securityConcerns: { type: Type.ARRAY, items: { type: Type.STRING } },
+          refactoredSnippet: { type: Type.STRING, description: "A code snippet showing a better way to do a specific part" }
+        }
+      }
+    }
+  });
+
+  const text = response.text;
+  if (!text) throw new Error("No response from Gemini");
+  return JSON.parse(text) as CodeReviewResult;
+};
+
+export const generateReferenceSolution = async (project: ProjectData): Promise<string> => {
+  const ai = getClient();
+  
+  const prompt = `Generate a production-grade reference solution for the following project in ${project.techStackRecommendation || 'the most appropriate language'}.
+  
+  Title: ${project.title}
+  Description: ${project.description}
+  
+  Include comments explaining key decisions.`;
+
+  const response = await ai.models.generateContent({
+    model: 'gemini-3-flash-preview',
+    contents: prompt
+  });
+  
+  return response.text || "Unable to generate solution.";
+}
