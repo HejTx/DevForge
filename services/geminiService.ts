@@ -2,8 +2,10 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { ProjectData, UserPreferences, Difficulty, CodeReviewResult } from "../types";
 
 const getClient = () => {
+  // Ensure we are using the env var correctly
   const apiKey = process.env.API_KEY;
   if (!apiKey) {
+    console.error("API_KEY is missing from environment variables");
     throw new Error("API_KEY environment variable is missing.");
   }
   return new GoogleGenAI({ apiKey });
@@ -23,59 +25,67 @@ export const generateProject = async (prefs: UserPreferences): Promise<ProjectDa
 
   The description should be verbose enough to leave no ambiguity about the expected behavior.
 
-  Include 3-5 distinct test cases with raw string inputs and expected outputs.`;
+  Include 3-5 distinct test cases with raw string inputs and expected outputs. Ensure the inputs are provided as they would appear in a raw text file (handling newlines etc).`;
 
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    contents: prompt,
-    config: {
-      systemInstruction: "You are a senior technical lead designing a comprehensive project specification.",
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          title: { type: Type.STRING },
-          description: { type: Type.STRING },
-          objective: { type: Type.STRING },
-          inputFormat: { type: Type.STRING, description: "Detailed specification of input format (source, structure, constraints)." },
-          outputFormat: { type: Type.STRING, description: "Detailed specification of output format." },
-          edgeCases: { 
-            type: Type.ARRAY,
-            items: { type: Type.STRING },
-            description: "List of specific edge cases to handle."
-          },
-          functionalRequirements: { 
-            type: Type.ARRAY,
-            items: { type: Type.STRING }
-          },
-          nonFunctionalRequirements: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING }
-          },
-          techStackRecommendation: { type: Type.STRING },
-          testCases: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                name: { type: Type.STRING },
-                input: { type: Type.STRING },
-                expectedOutput: { type: Type.STRING },
-                explanation: { type: Type.STRING }
-              },
-              required: ["name", "input", "expectedOutput", "explanation"]
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: prompt,
+      config: {
+        systemInstruction: "You are a senior technical lead designing a comprehensive project specification.",
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            title: { type: Type.STRING },
+            description: { type: Type.STRING },
+            objective: { type: Type.STRING },
+            inputFormat: { type: Type.STRING, description: "Detailed specification of input format (source, structure, constraints)." },
+            outputFormat: { type: Type.STRING, description: "Detailed specification of output format." },
+            edgeCases: { 
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+              description: "List of specific edge cases to handle."
+            },
+            functionalRequirements: { 
+              type: Type.ARRAY,
+              items: { type: Type.STRING }
+            },
+            nonFunctionalRequirements: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING }
+            },
+            techStackRecommendation: { type: Type.STRING },
+            testCases: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  name: { type: Type.STRING },
+                  input: { type: Type.STRING },
+                  expectedOutput: { type: Type.STRING },
+                  explanation: { type: Type.STRING }
+                },
+                required: ["name", "input", "expectedOutput", "explanation"]
+              }
             }
-          }
-        },
-        required: ["title", "description", "objective", "inputFormat", "outputFormat", "edgeCases", "functionalRequirements", "testCases"]
+          },
+          required: ["title", "description", "objective", "inputFormat", "outputFormat", "edgeCases", "functionalRequirements", "testCases"]
+        }
       }
-    }
-  });
+    });
 
-  const text = response.text;
-  if (!text) throw new Error("No response from Gemini");
-  
-  return JSON.parse(text) as ProjectData;
+    const text = response.text;
+    if (!text) throw new Error("No response text from Gemini");
+    
+    // Sanitize potential markdown code blocks (e.g. ```json ... ```)
+    const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    
+    return JSON.parse(jsonStr) as ProjectData;
+  } catch (error) {
+    console.error("Error generating project:", error);
+    throw error;
+  }
 };
 
 export const getMentorHint = async (
@@ -95,7 +105,6 @@ export const getMentorHint = async (
     Requirements: ${project.functionalRequirements.join('; ')}
   `;
 
-  // Fix: Initialize chat with history instead of replaying messages in a loop
   const chat = ai.chats.create({
     model: 'gemini-3-flash-preview',
     history: history.map(msg => ({
@@ -139,28 +148,35 @@ export const generateCodeReview = async (project: ProjectData, userCode: string)
   
   Provide a refactored snippet for the most critical improvement.`;
 
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    contents: prompt,
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          score: { type: Type.INTEGER, description: "Score out of 100" },
-          summary: { type: Type.STRING, description: "Executive summary of the review" },
-          strengths: { type: Type.ARRAY, items: { type: Type.STRING } },
-          weaknesses: { type: Type.ARRAY, items: { type: Type.STRING } },
-          securityConcerns: { type: Type.ARRAY, items: { type: Type.STRING } },
-          refactoredSnippet: { type: Type.STRING, description: "A code snippet showing a better way to do a specific part" }
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            score: { type: Type.INTEGER, description: "Score out of 100" },
+            summary: { type: Type.STRING, description: "Executive summary of the review" },
+            strengths: { type: Type.ARRAY, items: { type: Type.STRING } },
+            weaknesses: { type: Type.ARRAY, items: { type: Type.STRING } },
+            securityConcerns: { type: Type.ARRAY, items: { type: Type.STRING } },
+            refactoredSnippet: { type: Type.STRING, description: "A code snippet showing a better way to do a specific part" }
+          }
         }
       }
-    }
-  });
+    });
 
-  const text = response.text;
-  if (!text) throw new Error("No response from Gemini");
-  return JSON.parse(text) as CodeReviewResult;
+    const text = response.text;
+    if (!text) throw new Error("No response from Gemini");
+
+    const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    return JSON.parse(jsonStr) as CodeReviewResult;
+  } catch (error) {
+    console.error("Error generating code review:", error);
+    throw error;
+  }
 };
 
 export const generateReferenceSolution = async (project: ProjectData): Promise<string> => {

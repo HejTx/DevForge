@@ -84,16 +84,29 @@ function App() {
     setIsLoading(true);
     setError(null);
     try {
+      console.log("Generating project with prefs:", prefs);
       const newProject = await generateProject(prefs);
+      console.log("Project generated:", newProject);
+      
       // Save to Firestore
       const saved = await saveProject(newProject);
+      console.log("Project saved:", saved);
       
       setSavedProjects(prev => [saved, ...prev]);
       setProject(saved);
       setView('workspace');
     } catch (e: any) {
-      console.error(e);
-      setError("Failed to generate project. Please check your API key and try again.");
+      console.error("Create project failed:", e);
+      // More descriptive error message based on error type if possible
+      let msg = "Failed to generate project. ";
+      if (e.message?.includes("API_KEY")) {
+        msg += "API Key configuration error.";
+      } else if (e.message?.includes("parse")) {
+        msg += "AI response was not valid JSON.";
+      } else {
+         msg += "Please try again.";
+      }
+      setError(msg);
     } finally {
       setIsLoading(false);
     }
