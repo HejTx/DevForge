@@ -1,3 +1,4 @@
+// Reference to vite/client commented out as type definitions are missing in the environment
 // /// <reference types="vite/client" />
 
 interface ImportMetaEnv {

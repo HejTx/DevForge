@@ -95,8 +95,13 @@ export const getMentorHint = async (
     Requirements: ${project.functionalRequirements.join('; ')}
   `;
 
+  // Fix: Initialize chat with history instead of replaying messages in a loop
   const chat = ai.chats.create({
     model: 'gemini-3-flash-preview',
+    history: history.map(msg => ({
+      role: msg.role,
+      parts: [{ text: msg.text }]
+    })),
     config: {
       systemInstruction: `You are a Socratic mentor for a programming student. 
       The student is working on the project described below.
@@ -110,12 +115,6 @@ export const getMentorHint = async (
       ${context}`
     }
   });
-
-  for (const msg of history) {
-    if (msg.role === 'user') {
-       await chat.sendMessage({ message: msg.text });
-    }
-  }
 
   const result = await chat.sendMessage({ message: currentQuery });
   return result.text || "I couldn't generate a hint right now.";
