@@ -1,25 +1,71 @@
 import React, { useState, useEffect } from 'react';
+import { User } from 'firebase/auth';
 import { UserPreferences, ProjectData } from './types';
 import { generateProject } from './services/geminiService';
 import { saveProject, getProjects, deleteProject } from './services/storageService';
+import { auth } from './services/firebase';
+import { signInWithGoogle, logoutUser } from './services/userService';
+
 import SetupForm from './components/SetupForm';
 import ProjectWorkspace from './components/ProjectWorkspace';
 import ProjectHistory from './components/ProjectHistory';
-import { Terminal, History } from 'lucide-react';
+import LoginScreen from './components/LoginScreen';
+import MathForgeLink from './components/MathForgeLink';
+
+import { Terminal, History, LogOut } from 'lucide-react';
 
 type ViewState = 'setup' | 'workspace' | 'history';
 
 function App() {
+  // Auth State
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [loginLoading, setLoginLoading] = useState(false);
+
+  // App State
   const [project, setProject] = useState<ProjectData | null>(null);
   const [view, setView] = useState<ViewState>('setup');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedProjects, setSavedProjects] = useState<ProjectData[]>([]);
 
+  // Listen for auth changes
+  useEffect(() => {
+    if (!auth) {
+      setAuthLoading(false);
+      return;
+    }
+    
+    const unsubscribe = auth.onAuthStateChanged((currentUser) => {
+      setUser(currentUser);
+      setAuthLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   // Load projects on mount
   useEffect(() => {
     setSavedProjects(getProjects());
   }, []);
+
+  const handleLogin = async () => {
+    setLoginLoading(true);
+    try {
+      await signInWithGoogle();
+    } catch (e) {
+      console.error(e);
+      setError("Login failed. Please try again.");
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await logoutUser();
+    setProject(null);
+    setView('setup');
+  };
 
   const handleCreateProject = async (prefs: UserPreferences) => {
     setIsLoading(true);
@@ -63,8 +109,28 @@ function App() {
     setView('history');
   }
 
+  // Loading screen for initial auth check
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-slate-200 border-t-slate-900 rounded-full animate-spin"></div>
+          <p className="text-slate-500 font-medium text-sm">Loading DevForge...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Not logged in
+  if (!user) {
+    return <LoginScreen onLogin={handleLogin} isLoading={loginLoading} />;
+  }
+
+  // Main App
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
+      <MathForgeLink />
+      
       {/* Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -91,6 +157,21 @@ function App() {
                   <History className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">My Projects</span>
                 </button>
+             </div>
+
+             <div className="h-6 w-px bg-slate-200 mx-1"></div>
+
+             <div className="flex items-center gap-3">
+               {user.photoURL && (
+                 <img src={user.photoURL} alt="Profile" className="w-8 h-8 rounded-full border border-slate-200" />
+               )}
+               <button 
+                 onClick={handleLogout}
+                 className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                 title="Sign Out"
+               >
+                 <LogOut className="w-5 h-5" />
+               </button>
              </div>
           </div>
         </div>
