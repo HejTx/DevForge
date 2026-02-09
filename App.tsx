@@ -45,10 +45,22 @@ function App() {
     return () => unsubscribe();
   }, []);
 
-  // Load projects on mount
+  // Load projects when user logs in
   useEffect(() => {
-    setSavedProjects(getProjects());
-  }, []);
+    const loadProjects = async () => {
+      if (user) {
+        try {
+          const projects = await getProjects();
+          setSavedProjects(projects);
+        } catch (e) {
+          console.error("Failed to load projects", e);
+        }
+      } else {
+        setSavedProjects([]);
+      }
+    };
+    loadProjects();
+  }, [user]);
 
   const handleLogin = async () => {
     setLoginLoading(true);
@@ -73,8 +85,9 @@ function App() {
     setError(null);
     try {
       const newProject = await generateProject(prefs);
-      // Save immediately so it persists
-      const saved = saveProject(newProject);
+      // Save to Firestore
+      const saved = await saveProject(newProject);
+      
       setSavedProjects(prev => [saved, ...prev]);
       setProject(saved);
       setView('workspace');
@@ -91,12 +104,17 @@ function App() {
     setView('workspace');
   };
 
-  const handleDeleteProject = (id: string) => {
-    const updated = deleteProject(id);
-    setSavedProjects(updated);
-    if (project?.id === id) {
-      setProject(null);
-      setView('history');
+  const handleDeleteProject = async (id: string) => {
+    try {
+      await deleteProject(id);
+      setSavedProjects(prev => prev.filter(p => p.id !== id));
+      if (project?.id === id) {
+        setProject(null);
+        setView('history');
+      }
+    } catch (e) {
+      console.error("Failed to delete project", e);
+      setError("Failed to delete project. Please try again.");
     }
   };
 

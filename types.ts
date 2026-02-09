@@ -13,6 +13,7 @@ export interface TestCase {
 
 export interface ProjectData {
   id?: string;
+  userId?: string;
   createdAt?: number;
   title: string;
   description: string;

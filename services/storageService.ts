@@ -1,45 +1,57 @@
+import { db, auth } from "./firebase";
+import { 
+  collection, 
+  doc, 
+  setDoc, 
+  getDocs, 
+  deleteDoc, 
+  query, 
+  where
+} from "firebase/firestore";
 import { ProjectData } from "../types";
 
-const STORAGE_KEY = 'devforge_projects';
+const COLLECTION = 'projects';
 
-export const saveProject = (project: ProjectData): ProjectData => {
-  const projects = getProjects();
+export const saveProject = async (project: ProjectData): Promise<ProjectData> => {
+  if (!db || !auth?.currentUser) throw new Error("Database not initialized or user not logged in");
   
-  // Prepare project with ID and Timestamp if missing
-  const projectToSave: ProjectData = {
+  const userId = auth.currentUser.uid;
+  // Use existing ID or generate a new one
+  const projectId = project.id || doc(collection(db, COLLECTION)).id;
+  
+  const projectData: ProjectData = {
     ...project,
-    id: project.id || crypto.randomUUID(),
-    createdAt: project.createdAt || Date.now(),
+    id: projectId,
+    userId,
+    createdAt: project.createdAt || Date.now()
   };
 
-  // Check if it already exists to update it, otherwise add to front
-  const existingIndex = projects.findIndex(p => p.id === projectToSave.id);
-  
-  let newProjects;
-  if (existingIndex >= 0) {
-    newProjects = [...projects];
-    newProjects[existingIndex] = projectToSave;
-  } else {
-    newProjects = [projectToSave, ...projects];
-  }
-
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(newProjects));
-  return projectToSave;
+  await setDoc(doc(db, COLLECTION, projectId), projectData);
+  return projectData;
 };
 
-export const getProjects = (): ProjectData[] => {
+export const getProjects = async (): Promise<ProjectData[]> => {
+  if (!db || !auth?.currentUser) return [];
+
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
-  } catch (e) {
-    console.error("Failed to load projects", e);
+    // We fetch by userId and sort in memory to avoid needing a composite index immediately
+    const q = query(
+      collection(db, COLLECTION),
+      where("userId", "==", auth.currentUser.uid)
+    );
+    
+    const snapshot = await getDocs(q);
+    const projects = snapshot.docs.map(d => d.data() as ProjectData);
+    
+    // Sort by createdAt descending
+    return projects.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  } catch (error) {
+    console.error("Error fetching projects:", error);
     return [];
   }
 };
 
-export const deleteProject = (id: string): ProjectData[] => {
-  const projects = getProjects();
-  const filtered = projects.filter(p => p.id !== id);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
-  return filtered;
+export const deleteProject = async (id: string): Promise<void> => {
+  if (!db || !auth?.currentUser) return;
+  await deleteDoc(doc(db, COLLECTION, id));
 };
