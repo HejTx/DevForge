@@ -1,6 +1,6 @@
-import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { initializeApp, FirebaseApp } from "firebase/app";
+import { getAuth, Auth } from "firebase/auth";
+import { getFirestore, Firestore } from "firebase/firestore";
 
 // EXPLICIT ACCESS IS REQUIRED FOR BUNDLERS
 // We check import.meta.env first (Vite), then process.env (Standard/Webpack), then fallback
@@ -33,9 +33,10 @@ const firebaseConfig = {
   appId
 };
 
-let app = null;
-let auth = null;
-let db = null;
+// Explicit typing to satisfy TypeScript strict mode
+let app: FirebaseApp | undefined;
+let auth: Auth | undefined;
+let db: Firestore | undefined;
 
 try {
   if (apiKey) {
