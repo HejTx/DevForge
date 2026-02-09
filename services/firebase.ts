@@ -2,16 +2,16 @@ import { initializeApp, FirebaseApp } from "firebase/app";
 import { getAuth, Auth } from "firebase/auth";
 import { getFirestore, Firestore } from "firebase/firestore";
 
-// EXPLICIT ACCESS IS REQUIRED FOR BUNDLERS
-// We check import.meta.env first (Vite), then process.env (Standard/Webpack), then fallback
-// @ts-ignore
-const getEnv = (key: string) => {
+// Helper to get env vars safely across Vite/Standard environments
+const getEnv = (key: string): string | undefined => {
   // @ts-ignore
-  if (typeof import.meta !== 'undefined' && import.meta.env?.[key]) {
+  if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) {
     // @ts-ignore
     return import.meta.env[key];
   }
-  if (typeof process !== 'undefined' && process.env?.[key]) {
+  // @ts-ignore
+  if (typeof process !== 'undefined' && process.env && process.env[key]) {
+    // @ts-ignore
     return process.env[key];
   }
   return undefined;
@@ -33,21 +33,20 @@ const firebaseConfig = {
   appId
 };
 
-// Explicit typing to satisfy TypeScript strict mode
 let app: FirebaseApp | undefined;
 let auth: Auth | undefined;
 let db: Firestore | undefined;
 
-try {
-  if (apiKey) {
+if (apiKey && projectId) {
+  try {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     db = getFirestore(app);
-  } else {
-    console.warn("Firebase configuration missing. Check your .env file.");
+  } catch (error) {
+    console.error("Firebase initialization failed:", error);
   }
-} catch (error) {
-  console.error("Firebase init error", error);
+} else {
+  console.warn("Firebase configuration missing. Please check your environment variables.");
 }
 
 export { auth, db };

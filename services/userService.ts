@@ -8,15 +8,21 @@ import {
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 
 export const signInWithGoogle = async (): Promise<User | null> => {
-  if (!auth || !db) throw new Error("Firebase not initialized");
+  // Assign to local variables to allow TypeScript to narrow types correctly
+  const firebaseAuth = auth;
+  const firebaseDb = db;
+
+  if (!firebaseAuth || !firebaseDb) {
+    throw new Error("Firebase not initialized. Check your network or configuration.");
+  }
 
   try {
     const provider = new GoogleAuthProvider();
-    const result = await signInWithPopup(auth, provider);
+    const result = await signInWithPopup(firebaseAuth, provider);
     const user = result.user;
 
     // Check if user exists in Firestore
-    const userRef = doc(db, "users", user.uid);
+    const userRef = doc(firebaseDb, "users", user.uid);
     const userSnap = await getDoc(userRef);
 
     if (!userSnap.exists()) {
@@ -48,6 +54,7 @@ export const signInWithGoogle = async (): Promise<User | null> => {
 };
 
 export const logoutUser = async () => {
-  if (!auth) return;
-  await signOut(auth);
+  const firebaseAuth = auth;
+  if (!firebaseAuth) return;
+  await signOut(firebaseAuth);
 };

@@ -32,6 +32,7 @@ function App() {
   // Listen for auth changes
   useEffect(() => {
     if (!auth) {
+      console.warn("Auth service not available");
       setAuthLoading(false);
       return;
     }
