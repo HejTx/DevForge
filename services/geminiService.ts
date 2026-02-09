@@ -28,6 +28,7 @@ export const generateProject = async (prefs: UserPreferences): Promise<ProjectDa
   Include 3-5 distinct test cases with raw string inputs and expected outputs. Ensure the inputs are provided as they would appear in a raw text file (handling newlines etc).`;
 
   try {
+    console.log("Calling Gemini for project generation...");
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
@@ -76,10 +77,19 @@ export const generateProject = async (prefs: UserPreferences): Promise<ProjectDa
     });
 
     const text = response.text;
+    console.log("Raw Gemini response:", text);
+
     if (!text) throw new Error("No response text from Gemini");
     
-    // Sanitize potential markdown code blocks (e.g. ```json ... ```)
-    const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    // Improved JSON parsing: find the first '{' and the last '}'
+    const firstBrace = text.indexOf('{');
+    const lastBrace = text.lastIndexOf('}');
+    
+    if (firstBrace === -1 || lastBrace === -1) {
+      throw new Error("Valid JSON object not found in response");
+    }
+
+    const jsonStr = text.substring(firstBrace, lastBrace + 1);
     
     return JSON.parse(jsonStr) as ProjectData;
   } catch (error) {
@@ -171,7 +181,11 @@ export const generateCodeReview = async (project: ProjectData, userCode: string)
     const text = response.text;
     if (!text) throw new Error("No response from Gemini");
 
-    const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    const firstBrace = text.indexOf('{');
+    const lastBrace = text.lastIndexOf('}');
+    if (firstBrace === -1 || lastBrace === -1) throw new Error("Invalid JSON in review response");
+    
+    const jsonStr = text.substring(firstBrace, lastBrace + 1);
     return JSON.parse(jsonStr) as CodeReviewResult;
   } catch (error) {
     console.error("Error generating code review:", error);
