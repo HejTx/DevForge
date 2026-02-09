@@ -12,7 +12,8 @@ export default defineConfig(({ mode }) => {
     define: {
       // This is necessary because the app code uses `process.env.API_KEY`
       // We map the build-time environment variable to the code.
-      'process.env.API_KEY': JSON.stringify(env.API_KEY)
+      // We now check both API_KEY and VITE_API_KEY to ensure it works regardless of how you named it.
+      'process.env.API_KEY': JSON.stringify(env.API_KEY || env.VITE_API_KEY)
     }
   }
 })
